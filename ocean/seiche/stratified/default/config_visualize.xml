@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<config case="visualize">
+	<copy_file source_path="script_test_dir" source="vertAndHor.py" dest="vertAndHor.py"/>
+
+	<run_script name="run.py">
+                <step executable="python">
+                        <argument flag="vertAndHor.py"></argument>  
+                </step>
+	</run_script>
+</config>
