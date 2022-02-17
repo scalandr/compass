@@ -8,6 +8,7 @@
 		<option name="config_vert_tracer_adv_order">3</option>
                 <option name="config_horiz_tracer_adv_order">3</option> 
                 <option name="config_monotonic">.true.</option>
+                <option name="config_use_cvmix">.false.</option>
 		<option name="config_disable_thick_all_tend">.false.</option>
 		<option name="config_disable_thick_hadv">.false.</option>
 		<option name="config_disable_thick_vadv">.false.</option>
@@ -21,7 +22,7 @@
 		<option name="config_disable_vel_hmix">.false.</option>
 		<option name="config_disable_vel_surface_stress">.true.</option>
 		<option name="config_disable_vel_explicit_bottom_drag">.false.</option>
-		<option name="config_disable_vel_vmix">.false.</option>
+		<option name="config_disable_vel_vmix">.true.</option>
 		<option name="config_disable_vel_vadv">.false.</option>
 		<option name="config_disable_tr_all_tend">.false.</option>
     		<option name="config_disable_tr_adv">.false.</option>

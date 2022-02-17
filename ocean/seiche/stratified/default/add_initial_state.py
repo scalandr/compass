@@ -3,10 +3,10 @@
 '''
 This script creates an initial condition file for MPAS-Ocean.
 
-Steady state ETD test case
+Stratified internal seiche test case
 see:
-Demange, J., Debreu, L., Marchesiello, P., Lemarié, F., Blayo, E., Eldred, C., 2019. Stability analysis of split-explicit free surface ocean models: Implication of the depth-independent barotropic mode approximation. 
-Journal of Computational Physics 398, 108875. https://doi.org/10.1016/j.jcp.2019.108875
+A nonhydrostatic, isopycnal-coordinate ocean model for internal waves. Sean Vitousek, Oliver B. Fringer.
+Ocean Modelling, 83 (2014), 118–144
 '''
 
 import os
@@ -94,8 +94,6 @@ def main():
 
     vars3D = [ 'layerThickness','temperature', 'salinity',
          'zMid', 'density']
-    #vars3D = [ 'layerThickness','temperature', 'salinity',
-    #     'zMid', 'density', 'tracer1', 'tracer2', 'tracer3']
     for var in vars3D:
         globals()[var] = np.nan * np.ones([1, nCells, nVertLevels])
     restingThickness = np.nan * np.ones([nCells, nVertLevels])
@@ -113,11 +111,7 @@ def main():
         refBottomDepth[k] = refBottomDepth[k - 1] + refLayerThickness[k]
         refZMid[k] = -refBottomDepth[k - 1] - 0.5 * refLayerThickness[k]
 
-    # Marsaleix et al 2008 page 81
-    # Gaussian function in depth for deep sea ridge 
-    #bottomDepthObserved[:] = maxDepth - 1000.0 * np.exp(-((xCell[:] - xMid) / 15e3)**2)
-    # SSH varies from -1.0 to 1.0m across the domain
-    #ssh[:] = (xCell[:] - xMid)/ xMid
+    # SSH
     ssh[:] = 0.0
 
     # Compute maxLevelCell and layerThickness for z-level (variation only on top)
@@ -140,18 +134,9 @@ def main():
             bottomDepth[iCell] = refBottomDepth[nVertLevels - 1]
             layerThickness[0, iCell, :] = refLayerThickness[:] + ssh[iCell]/nVertLevels 
         #restingThickness[:, :] = layerThickness[0, :, :]
-        restingThickness[:, :] = refLayerThickness[:]
+        restingThickness[:, :] = refLayerThickness[:] 
 
-    # Compute maxLevelCell and layerThickness for sigma
-    #elif (vertical_coordinate=='sigma'):
-    #    vertCoordMovementWeights[:] = 1.0
-    #    maxLevelCell[:] = nVertLevels - 1 # maxLevelCell is zero-based within python code
-    #    bottomDepth[:] = bottomDepthObserved[:] 
-    #    for iCell in range(0, nCells):
-    #        restingThickness[iCell, :] = refLayerThickness[:]*bottomDepth[iCell]/maxDepth
-    #        layerThickness[0, iCell, :] = refLayerThickness[:]*(ssh[iCell] + bottomDepth[iCell])/maxDepth
-
-    # Compute zMid (same, regardless of vertical coordinate) #TODO: not sure it is correct
+    # Compute zMid (same, regardless of vertical coordinate)
     for iCell in range(0, nCells):
         k = maxLevelCell[iCell]
         zMid[0, iCell, k] = -bottomDepth[iCell] + \
@@ -184,19 +169,7 @@ def main():
         # T = Tref - (rho - rhoRef)/alpha
         temperature[0, activeCells, k] = config_eos_linear_Tref \
             - (density[0, activeCells, k] - config_eos_linear_densityref) / \
-              config_eos_linear_alpha
-    #for iCell in range(0, nCells): #TODO: what values should we give to the temperature?    
-    #    if (xCell[iCell] < xCellMid): 
-    #        temperature[0, iCell, :] = 20
-    #    else: 
-    #        temperature[0, iCell, :] = 20  
-    #    for k in range(0, nVertLevels):
-    #        psi1 = 1.0 - (((xCell[iCell] - 0.5*xCellMax)**4)/((0.5*xCellMax)**4))
-    #        psi2 = 1.0 - (((zMid[0, iCell, k] + 0.5*maxDepth)**2)/((0.5*maxDepth)**2)) 
-    #        psi = psi1*psi2
-    #        tracer1[0,iCell,k] = 0.5*(1 + math.tanh( r*(2*psi - 1) ) )
-    #tracer2[0,:,:] = 10
-    #tracer3[0,:,:] = 20
+              config_eos_linear_alpha  
 
     # initial velocity on edges
     ds['normalVelocity'] = (('Time', 'nEdges', 'nVertLevels',), np.zeros([1, nEdges, nVertLevels]))
