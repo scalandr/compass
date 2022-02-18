@@ -1,0 +1,5 @@
+<driver_script name="run.py">
+        <case name="visualize">
+		<step executable="./run.py" quiet="true" pre_message=" * Visualize velocity and tracer fields..." post_message="     complete!  Created file:  visualize/section.png"/>
+	</case>
+</driver_script>

@@ -1,13 +1,18 @@
 <?xml version="1.0"?>
-<config case="forward">
-	<add_link source="../initial_state/initial_state.nc" dest="init.nc"/>
-	<add_link source="../base_mesh/graph.info" dest="graph.info"/>
+<config case="nonhydro">
+	<add_link source="../../../init/default/initial_state/initial_state.nc" dest="init.nc"/>
+	<add_link source="../../../init/default/base_mesh/graph.info" dest="graph.info"/>
 
 	<add_executable source="model" dest="ocean_model"/>
 
 	<namelist name="namelist.ocean" mode="forward">
 		<template file="templates/template_forward_seiche.xml" path_base="script_configuration_dir"/>
 		<option name="config_dt">'00:00:0.01'</option>
+                <option name="config_enable_nonhydrostatic_mode">.true.</option>
+                <option name="config_nonhydrostatic_solve_surface_boundary_condition">'pressureTopGradientBottom'</option>
+                <option name="config_nonhydrostatic_preconditioner">'sor'</option>
+                <option name="config_nonhydrostatic_solver_type">'cg'</option>
+    		<option name="config_use_cvmix">.false.</option>
 	</namelist>
 
 	<streams name="streams.ocean" keep="immutable" mode="forward">

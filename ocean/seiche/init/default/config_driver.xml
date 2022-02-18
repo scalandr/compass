@@ -4,11 +4,5 @@
 	</case>
 	<case name="initial_state">
 		<step executable="./run.py" quiet="true" pre_message=" * Initializing ocean state with bathymetry and tracers..." post_message="     complete!  Created file:  initial_state/initial_state.nc"/>
-	</case>
-	<case name="forward">
-		<step executable="./run.py"/>
-	</case>
-        <case name="visualize">
-		<step executable="./run.py" quiet="true" pre_message=" * Visualize velocity and tracer fields..." post_message="     complete!  Created file:  visualize/section.png"/>
-	</case>
+        </case>
 </driver_script>
