@@ -1,0 +1,91 @@
+<template>
+	<namelist name="namelist.ocean" mode="forward">
+		<option name="config_ocean_run_mode">'forward'</option>
+		<option name="config_run_duration">'0001_16:30:00'</option>
+		<option name="config_vert_coord_movement">'uniform_stretching'</option>
+		<option name="config_block_decomp_file_prefix">'graph.info.part.'</option>
+		<option name="config_time_integrator">'split_explicit'</option>
+		<option name="config_vert_tracer_adv_order">3</option>
+                <option name="config_horiz_tracer_adv_order">2</option> 
+                <option name="config_monotonic">.true.</option>
+                <option name="config_use_cvmix">.false.</option>
+		<option name="config_disable_thick_all_tend">.false.</option>
+		<option name="config_disable_thick_hadv">.false.</option>
+		<option name="config_disable_thick_vadv">.false.</option>
+		<option name="config_disable_thick_sflux">.false.</option>
+		<option name="config_disable_vel_all_tend">.false.</option>
+		<option name="config_disable_vel_coriolis">.true.</option>
+    		<option name="config_disable_vvel_all_tend">.false.</option>
+    		<option name="config_disable_vvel_coriolis">.true.</option>
+    		<option name="config_disable_vvel_adv">.false.</option>
+		<option name="config_disable_vel_pgrad">.false.</option>
+		<option name="config_disable_vel_hmix">.false.</option>
+		<option name="config_disable_vel_surface_stress">.true.</option>
+    		<option name="config_disable_vel_topographic_wave_drag">.true.</option>
+		<option name="config_disable_vel_explicit_bottom_drag">.false.</option>
+		<option name="config_disable_vel_vmix">.true.</option>
+		<option name="config_disable_vel_vadv">.false.</option>
+		<option name="config_disable_tr_all_tend">.false.</option>
+    		<option name="config_disable_tr_adv">.false.</option>
+		<option name="config_disable_tr_hmix">.true.</option>
+		<option name="config_disable_tr_vmix">.true.</option>
+		<option name="config_disable_tr_sflux">.true.</option>
+		<option name="config_disable_tr_nonlocalflux">.true.</option>
+                <option name="config_use_mom_del2">.true.</option>
+    		<option name="config_mom_del2">0.1</option>
+		<option name="config_use_vertMom_del2">.false.</option>
+		<option name="config_pressure_gradient_type">'pressure_and_zmid'</option>
+		<option name="config_enable_nonhydrostatic_mode">.false.</option>	
+		<option name="config_cvmix_background_diffusion">0.0</option>
+		<option name="config_eos_type">'linear'</option>
+		<option name="config_implicit_bottom_drag_coeff">1.0e-2</option>
+		<option name="config_use_bulk_wind_stress">.false.</option>
+		<option name="config_use_activeTracers_surface_restoring">.false.</option>
+		<option name="config_use_activeTracers_interior_restoring">.false.</option>
+		<option name="config_use_bulk_thickness_flux">.false.</option>
+		<option name="config_use_activeTracers">.true.</option>
+		<option name="config_use_debugTracers">.false.</option>
+		<option name="config_AM_mixedLayerDepths_enable">.false.</option>
+		<option name="config_use_activeTracers_surface_bulk_forcing">.false.</option>
+		<option name="config_check_ssh_consistency">.true.</option>
+		<option name="config_vert_levels">-1</option>
+		<option name="config_init_configuration">'none'</option>
+		<option name="config_expand_sphere">.false.</option>
+		<option name="config_realistic_coriolis_parameter">.false.</option>
+		<option name="config_write_cull_cell_mask">.true.</option>
+		<option name="config_vertical_grid">'uniform'</option>
+	</namelist>
+
+	<streams name="streams.ocean" keep="immutable" mode="forward">
+		<stream name="mesh">
+			<attribute name="filename_template">init.nc</attribute>
+		</stream>
+		<stream name="input">
+			<attribute name="filename_template">init.nc</attribute>
+		</stream>
+		<stream name="restart">
+			<attribute name="output_interval">0005_00:00:00</attribute>
+		</stream>
+		<stream name="output">
+			<attribute name="type">output</attribute>
+			<attribute name="filename_template">output.nc</attribute>
+			<attribute name="output_interval">0000_01:30:00</attribute>
+			<attribute name="filename_interval">01-00-00_00:00:00</attribute>
+			<attribute name="clobber_mode">truncate</attribute>
+			<attribute name="reference_time">0001-01-01_00:00:00</attribute>
+			<add_contents>
+        			<member name="pressure" type="var"/>
+        			<member name="nonhydrostaticPressure" type="var"/>
+				<member name="tracers" type="var_struct"/>
+				<member name="xtime" type="var"/>
+				<member name="normalVelocity" type="var"/>
+    				<member name="verticalVelocity" type="var"/>
+				<member name="layerThickness" type="var"/>
+				<member name="zMid" type="var"/>	
+    				<member name="vertAleTransportTop" type="var"/>
+    				<member name="vertVelocityTop" type="var"/>
+			</add_contents>
+		</stream>
+
+	</streams>
+</template>
