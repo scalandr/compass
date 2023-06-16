@@ -240,35 +240,51 @@ class InitialState(Step):
              [-150.37235877543276, 152.0, -1.3799777152066421, 32.86025114721338],
              [-151.36128410277843, 153.0, -1.383397844834255, 32.87079495025499]]
 
-        length = np.size(A) / 4
+        length = int(np.size(A) / 4)
         B = np.zeros(length)
         C = np.zeros(length)
         D = np.zeros(length)
+        ds['T_itp77'] = xarray.ones_like(ds.refZMid)
+        ds['S_itp77'] = xarray.ones_like(ds.refZMid)
+        T_itp77 = ds['T_itp77']
+        S_itp77 = ds['S_itp77']
         for i in range(0, length):
             b = A[i]
             B[i] = b[0]
             C[i] = b[2]
             D[i] = b[3]
-        T_itp77 = np.interp(ds.refZMid, B, C)
-        S_itp77 = np.interp(ds.refZMid, B, D)
+        T_itp77[:] = np.interp(ds.refZMid, B, C)
+        S_itp77[:] = np.interp(ds.refZMid, B, D)
+        # for k in range(0, nVertLevels):
+        # T_itp77[k] = C[k]
+        # S_itp77[k] = D[k]
 
         deltaSy = (0.001 * deltaS) / beta + gsw.alpha_on_beta(linear_Sref, linear_Tref, 10.0) * deltaT
+        print(gsw.alpha_on_beta(linear_Sref, linear_Tref, 10.0))
+        print(deltaSy)
         deltaSz = 0.5 * deltaSy
         deltaTz = 0.5 * deltaT
-        Y = np.sin((ds.yCell - 0.5 * ny * dc) / (2.0 * np.pi * ny * dc))
-        Z = 0.5 * (1 + np.tanh((-ds.refZMid + zm) / deltaH))
+        ds['Y'] = xarray.zeros_like(xCell)
+        Y = ds['Y']
+        Y[:] = np.sin((ds.yCell - 0.5 * ny * dc) / (2.0 * np.pi * ny * dc))
+        Z = 0.5 * (1 + np.tanh((ds.refZMid + zm) / deltaH))
         ds['temperature'] = xarray.ones_like(ds.zMid).where(ds.cellMask)
         temperature = ds['temperature']
         ds['salinity'] = xarray.ones_like(ds.zMid).where(ds.cellMask)
         salinity = ds['salinity']
+        count = 0
         for k in range(0, nVertLevels):
-            if (ds.refZMid[k] < zm):
-                temperature[0, :, k] = Z[k] * [deltaT * Y - deltaTz] + T_itp77[k]
-                salinity[0, :, k] = Z[k] * [deltaSy * Y - deltaSz] + S_itp77[k]
+            # if (ds.refZMid[k] < zm):
+            if (-ds.refZMid[k] < zm):
+                count = count + 1
+                temperature[0, :, k] = Z[k] * (deltaT * Y - deltaTz) + T_itp77[k]
+                salinity[0, :, k] = Z[k] * (deltaSy * Y - deltaSz) + S_itp77[k]
+                # salinity[0, :, k] = Z[k] * (100.0*Y) + S_itp77[k]
             else:
                 temperature[0, :, k] = T_itp77[k]
                 salinity[0, :, k] = S_itp77[k]
 
+        print(count)
         # initial velocity on edges
         ds['normalVelocity'] = (('Time', 'nEdges', 'nVertLevels',),
                                 np.zeros([1, nEdges, nVertLevels]))
