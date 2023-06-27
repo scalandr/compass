@@ -2,10 +2,12 @@ import time
 
 import gsw
 import numpy as np
+import pandas as pd
 import xarray
 from mpas_tools.io import write_netcdf
 from mpas_tools.mesh.conversion import convert, cull
 from mpas_tools.planar_hex import make_planar_hex_mesh
+from scipy.interpolate import interp1d
 
 from compass.ocean.vertical import init_vertical_coord
 from compass.step import Step
@@ -25,6 +27,9 @@ class InitialState(Step):
         test_case : compass.TestCase
         """
         super().__init__(test_case=test_case, name='initial_state')
+
+        self.add_input_file(filename='itp77.csv', target='itp77.csv',
+                            database='mixed_layer_restrat')
 
         for file in ['base_mesh.nc', 'culled_mesh.nc', 'culled_graph.info',
                      'initial_state.nc']:
@@ -76,6 +81,8 @@ class InitialState(Step):
         nVertices = ds.nVertices.size
 
         xCell = ds.xCell
+        angleEdge = ds.angleEdge.values
+        cellsOnEdge = ds.cellsOnEdge.values
 
         # comment('create and initialize variables')
         time1 = time.time()
@@ -86,7 +93,7 @@ class InitialState(Step):
         init_vertical_coord(config, ds)
 
         # alpha, beta
-        # alpha = linear_densityref * gsw.alpha(linear_Sref, linear_Tref, 10.0)
+        alpha = linear_densityref * gsw.alpha(linear_Sref, linear_Tref, 10.0)
         beta = linear_densityref * gsw.beta(linear_Sref, linear_Tref, 10.0)
 
         # initial salinity, density, temperature
@@ -240,33 +247,32 @@ class InitialState(Step):
              [-150.37235877543276, 152.0, -1.3799777152066421, 32.86025114721338],
              [-151.36128410277843, 153.0, -1.383397844834255, 32.87079495025499]]
 
-        length = int(np.size(A) / 4)
-        B = np.zeros(length)
-        C = np.zeros(length)
-        D = np.zeros(length)
-        ds['T_itp77'] = xarray.ones_like(ds.refZMid)
-        ds['S_itp77'] = xarray.ones_like(ds.refZMid)
-        T_itp77 = ds['T_itp77']
-        S_itp77 = ds['S_itp77']
-        for i in range(0, length):
-            b = A[i]
-            B[i] = b[0]
-            C[i] = b[2]
-            D[i] = b[3]
-        T_itp77[:] = np.interp(ds.refZMid, B, C)
-        S_itp77[:] = np.interp(ds.refZMid, B, D)
-        # for k in range(0, nVertLevels):
-        # T_itp77[k] = C[k]
-        # S_itp77[k] = D[k]
+        data = pd.read_csv('itp77.csv', header=0, names=['z', 'p', 'pt', 'sa'])
 
-        deltaSy = (0.001 * deltaS) / beta + gsw.alpha_on_beta(linear_Sref, linear_Tref, 10.0) * deltaT
+        ds['S_itp77'] = xarray.ones_like(ds.refZMid)
+        S_itp77 = ds['S_itp77']
+        z_itp = data.z.to_numpy()
+        z_itp = np.insert(z_itp, 0, 0)
+        pt_itp = data.pt.to_numpy()
+        pt_itp = np.insert(pt_itp, 0, pt_itp[0])
+        sa_itp = data.sa.to_numpy()
+        sa_itp = np.insert(sa_itp, 0, sa_itp[0])
+        f = interp1d(z_itp, pt_itp)
+        T_itp77 = f(ds.refZMid.values)
+        f = interp1d(z_itp, sa_itp)
+        S_itp77[:] = f(ds.refZMid.values)
+
+        deltaSy = \
+            (0.001 * deltaS) / beta + \
+            gsw.alpha_on_beta(linear_Sref, linear_Tref, 10.0) * deltaT
         print(gsw.alpha_on_beta(linear_Sref, linear_Tref, 10.0))
         print(deltaSy)
         deltaSz = 0.5 * deltaSy
         deltaTz = 0.5 * deltaT
+        B = 2.0 * np.pi * ny * dc
         ds['Y'] = xarray.zeros_like(xCell)
         Y = ds['Y']
-        Y[:] = np.sin((ds.yCell - 0.5 * ny * dc) / (2.0 * np.pi * ny * dc))
+        Y[:] = np.sin((ds.yCell - 0.5 * ny * dc) / B)
         Z = 0.5 * (1 + np.tanh((ds.refZMid + zm) / deltaH))
         ds['temperature'] = xarray.ones_like(ds.zMid).where(ds.cellMask)
         temperature = ds['temperature']
@@ -277,25 +283,57 @@ class InitialState(Step):
             # if (ds.refZMid[k] < zm):
             if (-ds.refZMid[k] < zm):
                 count = count + 1
-                temperature[0, :, k] = Z[k] * (deltaT * Y - deltaTz) + T_itp77[k]
-                salinity[0, :, k] = Z[k] * (deltaSy * Y - deltaSz) + S_itp77[k]
-                # salinity[0, :, k] = Z[k] * (100.0*Y) + S_itp77[k]
+                temperature[0, :, k] = \
+                    Z[k] * (deltaT * Y - deltaTz) + T_itp77[k]
+                salinity[0, :, k] = \
+                    Z[k] * (deltaSy * (100.0*Y[:]) - deltaSz) + S_itp77[k]
+                    # Z[k] * (deltaSy * (Y[:]) - deltaSz) + S_itp77[k]
             else:
                 temperature[0, :, k] = T_itp77[k]
                 salinity[0, :, k] = S_itp77[k]
-
         print(count)
-        # initial velocity on edges
-        ds['normalVelocity'] = (('Time', 'nEdges', 'nVertLevels',),
-                                np.zeros([1, nEdges, nVertLevels]))
+
+        ds['density'] = xarray.ones_like(ds.zMid).where(ds.cellMask)
+        density = ds['density']
+        density[0, :, :] = linear_densityref + beta * salinity[0, :, :] - \
+                alpha * temperature[0, :, :]
 
         # Coriolis parameter
         ds['fCell'] = (('nCells', 'nVertLevels',),
-                       np.zeros([nCells, nVertLevels]))
+                       0.00014 * np.ones([nCells, nVertLevels]))
         ds['fEdge'] = (('nEdges', 'nVertLevels',),
-                       np.zeros([nEdges, nVertLevels]))
+                       0.00014 * np.ones([nEdges, nVertLevels]))
         ds['fVertex'] = (('nVertices', 'nVertLevels',),
                          np.zeros([nVertices, nVertLevels]))
+
+        # initial velocity on edges
+        u_cell = np.zeros([1, nCells, nVertLevels])
+        u = np.zeros([1, nEdges, nVertLevels])
+        v = np.zeros([1, nEdges, nVertLevels])
+        drhoy = np.zeros([1, nCells])
+        integral_drho = np.zeros([1, nCells])
+        layerThickness = ds['layerThickness']
+        deltaRhoy = beta * deltaSy - alpha * deltaT
+        g = 9.81
+
+        for k in range(nVertLevels-1, 0, -1):
+            print(k)
+            if (-ds.refZMid[k] < zm):
+                # drhoy[0, :] = B * deltaRhoy * Z[k] * np.cos((ds.yCell - 0.5 * ny * dc)/B)
+                drhoy[0, :] = deltaRhoy * Z[k] * np.cos((ds.yCell - 0.5 * ny * dc)/B)
+                integral_drho[0, :] = integral_drho[0, :] + \
+                    layerThickness[0, :, k] * drhoy[0, :] / density[0, :, k]
+                u_cell[0, :, k] = g * integral_drho[0, :] / ds.fCell[:, k]
+        for iEdge in range (0, nEdges):
+            cell1 = cellsOnEdge[iEdge, 0] - 1
+            cell2 = cellsOnEdge[iEdge, 1] - 1
+            u[0, iEdge, :] = 0.5*(u_cell[0, cell1, :] + u_cell[0, cell2, :])
+        ds['normalVelocity'] = (('Time', 'nEdges', 'nVertLevels',),
+                                np.zeros([1, nEdges, nVertLevels]))
+        normalVelocity = ds['normalVelocity']
+        for iEdge in range(0, nEdges):
+            normalVelocity[0, iEdge, :] = u[0, iEdge, :] * \
+                np.cos(angleEdge[iEdge]) + v[0, iEdge, :] * np.sin(angleEdge[iEdge])
 
         print(f'   time: {time.time() - time1}')
 
