@@ -1,5 +1,4 @@
 import gsw
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -46,7 +45,7 @@ class InitialState(Step):
         ny = section.getint('ny')
         dc = section.getfloat('dc')
 
-        dsMesh = make_planar_hex_mesh(nx=nx, ny=ny, dc=dc, nonperiodic_x=True,
+        dsMesh = make_planar_hex_mesh(nx=nx, ny=ny, dc=dc, nonperiodic_x=False,
                                       nonperiodic_y=False)
         write_netcdf(dsMesh, 'base_mesh.nc')
 
@@ -79,7 +78,8 @@ class InitialState(Step):
         cellsOnEdge = ds.cellsOnEdge.values
 
         ds['bottomDepth'] = maxDepth * xr.ones_like(ds.xCell)
-        ds['ssh'] = xr.zeros_like(ds.xCell)
+        ssh = xr.zeros_like(ds.xCell)
+        ds['ssh'] = ssh
 
         init_vertical_coord(config, ds)
 
@@ -168,25 +168,17 @@ class InitialState(Step):
             np.cos(angleEdge)
         ds['normalVelocity'] = normalVelocity.expand_dims(dim='Time', axis=0)
 
-        # If you prefer not to have NaN as the fill value, you should consider
-        # using mpas_tools.io.write_netcdf() instead
+        rho_mid = xr.zeros_like(ds.refZMid)
+        idx_min = np.argmin(yCell)
+        idx_max = np.argmax(yCell)
+        rho_mid = 0.5 * (density[idx_min, :] + density[idx_max, :])
+        for k in range(nVertLevels - 1, 0, -1):
+            ssh += layerThickness[0, :, k] * (density[:, k] - rho_mid[k])
+        ssh = ssh / density[:, 0]
+        ds['ssh'] = ssh.expand_dims(dim="Time", axis=0)
+
+        # We need to run this again because the layer thicknesses need to be
+        # updated
+        init_vertical_coord(config, ds)
+
         write_netcdf(ds, 'initial_state.nc')
-
-        plt.figure(1, figsize=(12.0, 6.0))
-        salinity_slice = salinity[0, range(0, nCells, nx), :].values
-        plt.imshow(salinity_slice.T, clim=[24, 32])
-        plt.colorbar()
-        plt.xlabel(f'{dc} * y, km')
-        plt.ylabel('layer number')
-        plt.title('salinity yz plot')
-        plt.savefig('salinity.png')
-        plt.close()
-
-        plt.figure(1, figsize=(12.0, 6.0))
-        salinity_slice = u_cell[range(0, nCells, nx), :]
-        plt.imshow(salinity_slice.T)
-        plt.colorbar()
-        plt.xlabel(f'{dc} * y, km')
-        plt.ylabel('layer number')
-        plt.title('u_x yz plot')
-        plt.savefig('velocity_x.png')
