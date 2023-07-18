@@ -17,11 +17,14 @@
     <var_struct name="tracers"/>
     <var name="xtime"/>
     <var name="normalVelocity"/>
+    <var name="velocityZonal"/>
+    <var name="velocityMeridional"/>
     <var name="layerThickness"/>
     <var name="pressure"/>
     <var name="density"/>
     <var name="kineticEnergyCell"/>
     <var name="zMid"/>
+    <var name="ssh"/>
     <var name="vertAleTransportTop"/>
     <var name="vertVelocityTop"/>
 </stream>

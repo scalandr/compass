@@ -1,7 +1,9 @@
 import matplotlib
 import matplotlib.pyplot as plt
-from netCDF4 import Dataset
+import numpy as np
+import xarray as xr
 
+from compass.ocean.tests.arctic_channel import horiz
 from compass.step import Step
 
 matplotlib.use('Agg')
@@ -38,30 +40,136 @@ class Visualize(Step):
         config = self.config
 
         section = config['visualize']
-        L0 = section.getfloat('L0')
-        a0 = section.getfloat('a0')
+        # L0 = section.getfloat('L0')
+        # a0 = section.getfloat('a0')
         time = section.getint('plotTime')
 
-        plt.figure(1, figsize=(11.0, 4.0))
+        ncfileIC = xr.open_dataset('init.nc')
+        ds = xr.open_dataset('output.nc')
 
-        ncfileIC = Dataset('init.nc', 'r')
-        ncfile = Dataset('output.nc', 'r')
-        temp = ncfile.variables['density'][time, 0:500, :]
-        temp = temp - 1000
-        xCell = ncfileIC.variables['xCell'][0:500]
-        zMid = ncfile.variables['zMid'][time, 0, :]
-        x = xCell / L0
-        z = zMid / a0
-        plt.contour(x, z, temp.T, levels=[23, 23.25, 23.5, 23.75, 24,
-                    24.25, 24.5, 24.75, 25, 25.25, 25.5, 25.75,
-                    26, 26.25, 26.5, 26.75, 27], cmap='jet')
-        plt.xticks([0, 0.2, 0.4, 0.6, 0.8, 1], [0, 10, 20, 30, 40, 50])
-        plt.yticks([0, -0.2, -0.4, -0.6, -0.8, -1], [0, -2, -4, -6, -8, -10])
-        plt.xlabel('x, cm')
-        plt.ylabel('z, cm')
-        plt.colorbar(shrink=0.7)
+        # get grid variables
+        nCells = ds.sizes['nCells']
+        nVertLevels = ds.sizes['nVertLevels']
+        section = config['horizontal_grid']
+        nx = section.getint('nx')
+        yCell = ncfileIC.variables['yCell'].values
+        zMid = ds.variables['zMid'][time, 0, :]
+        y = yCell[range(int(nx / 2), nCells, nx)] / 1e3
+        z = zMid  # / a0
 
-        ncfileIC.close()
-        ncfile.close()
-        plt.savefig('plotTemp.png')
+        # Prep variables for cell quantities
+        xEdge = ncfileIC.xEdge
+        yEdge = ncfileIC.yEdge
+        xEdge_mid = np.median(xEdge)
+        edgeMask_x = np.equal(xEdge, xEdge_mid)
+        # cellsOnEdge = ncfileIC.cellsOnEdge
+        # cellsOnEdge_x = cellsOnEdge[edgeMask_x, :]
+        # cellIndex = np.subtract(cellsOnEdge_x[1:, 0], 1)
+        yEdge_x = yEdge[edgeMask_x]
+        layerThickness = ds.layerThickness.isel(Time=time)
+
+        zInterface = np.zeros((nCells, nVertLevels + 1))
+        zInterface[:, 0] = 0.  # TODO ds.ssh.values
+        for zIndex in range(nVertLevels):
+            thickness = layerThickness.isel(nVertLevels=zIndex)
+            thickness = thickness.fillna(0.)
+            zInterface[:, zIndex + 1] = \
+                zInterface[:, zIndex] - thickness.values
+        zInterfaces_mesh, yCells_mesh = np.meshgrid(zInterface[0, :],
+                                                    yEdge_x)
+
+        # Import cell quantities
+        # temperature = ds.temperature.isel(Time=time)
+        # temperature_x = temperature[cellIndex, :]
+        salinity_i = ds.salinity.isel(Time=0)
+        salinity = ds.salinity.isel(Time=time)
+        # salinity_x = salinity[cellIndex, :]
+        # w = ds.vertVelocityTop.isel(Time=time)
+        # w_x = w[cellIndex, 1:]
+
+        zlim = [-80, 0]
+        # temp_levels = np.arange(-3, -1, 0.25)
+        # density_levels = np.arange(23, 27, 0.25)
+        sa_levels = np.arange(24, 32, 0.5)
+
+        # Density
+        # var = ds.variables['density'][time, range(int(nx/2), nCells, nx), :]
+        # var = var - 1000
+        # plt.contour(y, z, var.T, levels=density_levels, cmap='jet')
+        # plt.xlabel('y (m)')
+        # plt.ylabel('z (m)')
+        # plt.colorbar(shrink=0.7)
+        # plt.savefig(f'density_{time}.png')
+        # plt.close()
+
+        # Temperature
+        # var = temperature[time, range(int(nx/2), nCells, nx), :]
+        # plt.contour(y, z, var.T, levels=temp_levels, cmap='jet')
+        # plt.xlabel('y (m)')
+        # plt.ylabel('z (m)')
+        # plt.colorbar(shrink=0.7)
+        # plt.savefig(f'temperature_{time}.png')
+        # plt.close()
+
+        # Salinity
+        plot_mean = False
+        plt.figure()
+        var = np.zeros((len(y), len(z)))
+        var_i = np.zeros((len(y), len(z)))
+        y_unique = np.unique(yCell)
+        if plot_mean:
+            for i in range(len(y_unique)):
+                y_index = yCell == y_unique[i]
+                var[i, :] = salinity[y_index, :].mean(axis=0)
+                var_i[i, :] = salinity_i[y_index, :].mean(axis=0)
+        else:
+            var = salinity[range(int(nx / 2), nCells, nx), :]
+        plt.contour(y, z, var_i.T, linestyles='--', levels=sa_levels,
+                    cmap='jet')
+        c1 = plt.contour(y, z, var.T, levels=sa_levels, cmap='jet')
+        plt.ylim(zlim)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.xlabel('y (km)', fontsize=16)
+        plt.ylabel('z (m)', fontsize=16)
+        cbar = plt.colorbar(c1, shrink=0.7)
+        cbar.ax.tick_params(labelsize=14)
+        cbar.ax.set_ylabel('salinity (PSU)', fontsize=16)
+        plt.tight_layout()
+        plt.savefig(f'salinity_{time}.png')
         plt.close()
+
+        # plt.figure()
+        # plt.pcolormesh(np.divide(yCells_mesh, 1e3),
+        #                zInterfaces_mesh,
+        #                salinity_x.values, cmap='viridis')
+        # plt.xticks(fontsize=14)
+        # plt.yticks(fontsize=14)
+        # plt.xlabel('y (km)', fontsize=16)
+        # plt.ylabel('z (m)', fontsize=16)
+        # cbar = plt.colorbar()
+        # cbar.ax.set_title('salinity (PSU)', fontsize=16)
+        # plt.savefig(f'sa_depth_section_t{time}.png',
+        #             bbox_inches='tight', dpi=200)
+        # plt.close()
+
+        # # Vertical velocity
+        # plt.figure()
+        # plt.pcolormesh(np.divide(yCells_mesh, 1e3),
+        #                zInterfaces_mesh,
+        #                w_x.values, cmap='coolwarm', clim=[-1e-3,1e-3])
+        # plt.xlabel('y (km)')
+        # plt.ylabel('z (m)')
+        # cbar = plt.colorbar()
+        # cbar.ax.set_title('w (m/s)')
+        # plt.savefig(f'w_depth_section_t{time}.png',
+        #             bbox_inches='tight', dpi=200)
+        # plt.close()
+
+        for var in ['salinity', 'temperature', 'velocityZonal',
+                    'velocityMeridional']:
+            horiz.plot_horiz_field(ds, ncfileIC, f'{var}',
+                                   out_file_name=f'{var}_surface_t{time}',
+                                   t_index=time, z_index=0)
+        ncfileIC.close()
+        ds.close()
