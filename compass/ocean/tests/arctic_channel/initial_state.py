@@ -46,7 +46,7 @@ class InitialState(Step):
         dc = section.getfloat('dc')
 
         dsMesh = make_planar_hex_mesh(nx=nx, ny=ny, dc=dc, nonperiodic_x=False,
-                                      nonperiodic_y=False)
+                                      nonperiodic_y=True)
         write_netcdf(dsMesh, 'base_mesh.nc')
 
         dsMesh = cull(dsMesh, logger=logger)
@@ -82,6 +82,7 @@ class InitialState(Step):
         ds['ssh'] = ssh
 
         init_vertical_coord(config, ds)
+        dsMesh['maxLevelCell'] = ds.maxLevelCell
 
         # alpha, beta
         alpha = linear_densityref * gsw.alpha(linear_Sref, linear_Tref, 10.0)
@@ -90,18 +91,24 @@ class InitialState(Step):
         # initial salinity, density, temperature
         data = pd.read_csv('itp77.csv', header=0, names=['z', 'p', 'pt', 'sa'])
 
-        ds['S_itp77'] = xr.ones_like(ds.refZMid)
-        S_itp77 = ds['S_itp77']
+        refZMid = ds.refZMid.values
+        T_itp77 = xr.ones_like(ds.refZMid)
+        S_itp77 = xr.ones_like(ds.refZMid)
         z_itp = data.z.to_numpy()
         z_itp = np.insert(z_itp, 0, 0)
         pt_itp = data.pt.to_numpy()
         pt_itp = np.insert(pt_itp, 0, pt_itp[0])
         sa_itp = data.sa.to_numpy()
         sa_itp = np.insert(sa_itp, 0, sa_itp[0])
-        f = interp1d(z_itp, pt_itp)
-        T_itp77 = f(ds.refZMid.values)
-        f = interp1d(z_itp, sa_itp)
-        S_itp77 = f(ds.refZMid.values)
+        fT = interp1d(z_itp, pt_itp)
+        fS = interp1d(z_itp, sa_itp)
+        T_itp77 = fT(ds.refZMid.values)
+        S_itp77 = fS(ds.refZMid.values)
+
+        # set the mixed layer to the value at the base of the mixed layer
+        T_itp77[refZMid >= -zm] = fT(-zm)
+        S_itp77[refZMid >= -zm] = fS(-zm)
+
         beta_0 = 1.e-3
         rho_ref = 1.e3
 
@@ -109,24 +116,29 @@ class InitialState(Step):
             (beta_0 * deltaS) / (beta / rho_ref) + \
             (alpha * deltaT / beta)
         deltaSz = 0.5 * deltaSy
-        refZMid = ds.refZMid.values
         deltaTz = 0.5 * deltaT
+
+        # Solve for the function that controls how T,S vary in the y-dimension
         Ly = ny * dc
         Ly_actual = np.max(yCell) - np.min(yCell)
         yCellNorm = yCell - 0.5 * Ly_actual
         B = Ly / (2. * np.pi)
-        Y = 0.5 * np.sin(yCellNorm / B)
+        # This is what the text says it's implementing
+        # Y = 0.5 * np.sin(yCellNorm / B)
+        # This is what is shown in the paper figures
+        Y = np.sin(yCellNorm / B)
+
+        # Solve for the function that controls how T,S vary in the z-dimension
         Z = np.where(-refZMid < zm,
                      0.5 * (1. + np.tanh((refZMid + zm) / deltaH)),
                      0.)
         fz, fy = np.meshgrid(Z, Y)
-        F = fy * fz
         temperature = xr.ones_like(ds.zMid)
         salinity = xr.ones_like(ds.zMid)
         temperature = np.multiply(temperature, T_itp77)
         salinity = np.multiply(salinity, S_itp77)
-        temperature += (F * deltaT - Z * deltaTz)
-        salinity += (F * deltaS - Z * deltaSz)
+        temperature += fz * (fy * deltaT - deltaTz)
+        salinity += fz * (fy * deltaS - deltaSz)
         ds['temperature'] = temperature
         ds['salinity'] = salinity
 
@@ -143,14 +155,16 @@ class InitialState(Step):
 
         # initial velocity on edges
         u_cell = np.zeros([nCells, nVertLevels])
-        u = np.zeros([nEdges, nVertLevels])
+        normalVelocity = xr.DataArray(np.zeros([nEdges, nVertLevels]),
+                                      dims=['nEdges', 'nVertLevels'])
+        u = normalVelocity.copy()
         drhoy = np.zeros([nCells, nVertLevels])
         integral_drho = np.zeros([nCells])
         layerThickness = ds.layerThickness.values
         deltaRhoy = beta * deltaSy - alpha * deltaT
         g = 9.81
 
-        for k in range(nVertLevels - 1, 0, -1):
+        for k in range(nVertLevels - 1, -1, -1):
             if (-refZMid[k] < zm):
                 # d/dy(0.5 * deltaRhoy * Z * np.sin(yCellNorm / B))
                 drhoy[:, k] = 0.5 * deltaRhoy * Z[k] * \
@@ -162,20 +176,21 @@ class InitialState(Step):
             cell1 = cellsOnEdge[iEdge, 0] - 1
             cell2 = cellsOnEdge[iEdge, 1] - 1
             u[iEdge, :] = 0.5 * (u_cell[cell1, :] + u_cell[cell2, :])
-        normalVelocity = xr.zeros_like(ds.xEdge)
-        normalVelocity = normalVelocity.expand_dims(dim='nVertLevels', axis=1)
         normalVelocity = xr.DataArray(u, dims=['nEdges', 'nVertLevels']) * \
             np.cos(angleEdge)
         ds['normalVelocity'] = normalVelocity.expand_dims(dim='Time', axis=0)
+        ds['velocityMeridional'] = u.expand_dims(dim='Time', axis=0)
 
         rho_mid = xr.zeros_like(ds.refZMid)
         idx_min = np.argmin(yCell)
         idx_max = np.argmax(yCell)
         rho_mid = 0.5 * (density[idx_min, :] + density[idx_max, :])
-        for k in range(nVertLevels - 1, 0, -1):
+        for k in range(nVertLevels - 1, -1, -1):
             ssh += layerThickness[0, :, k] * (density[:, k] - rho_mid[k])
         ssh = ssh / density[:, 0]
         ds['ssh'] = ssh.expand_dims(dim="Time", axis=0)
+
+        # TODO add noise to the salinity field
 
         # We need to run this again because the layer thicknesses need to be
         # updated
