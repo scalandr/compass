@@ -190,10 +190,12 @@ class InitialState(Step):
         ssh = ssh / density[:, 0]
         ds['ssh'] = ssh.expand_dims(dim="Time", axis=0)
 
-        # TODO add noise to the salinity field
+        # Add noise to the salinity field
+        ds['salinity'] = ds.salinity + \
+            1.e-3 * np.random.rand(1, nCells, nVertLevels)
 
         # We need to run this again because the layer thicknesses need to be
-        # updated
+        # updated to be consistent with ssh
         init_vertical_coord(config, ds)
 
         write_netcdf(ds, 'initial_state.nc')
