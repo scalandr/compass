@@ -57,6 +57,13 @@ class Forward(Step):
 
         self.add_output_file(filename='output.nc')
 
+        self.add_input_file(filename='actualStreamF.py', target='actualStreamF.py',
+                            database='/home/ac.scalandrini/repos/add_arctic_test/compass/ocean/tests/arctic_channel')
+        self.add_input_file(filename='actualStreamF_2.py', target='actualStreamF_2.py',
+                            database='/home/ac.scalandrini/repos/add_arctic_test/compass/ocean/tests/arctic_channel')
+        self.add_input_file(filename='computedStreamF.py', target='computedStreamF.py',
+                            database='/home/ac.scalandrini/repos/add_arctic_test/compass/ocean/tests/arctic_channel')
+
     # no setup() is needed
 
     def run(self):
