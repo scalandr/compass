@@ -63,6 +63,8 @@ class Forward(Step):
                             database='/home/ac.scalandrini/repos/add_arctic_test/compass/ocean/tests/arctic_channel')
         self.add_input_file(filename='computedStreamF.py', target='computedStreamF.py',
                             database='/home/ac.scalandrini/repos/add_arctic_test/compass/ocean/tests/arctic_channel')
+        self.add_input_file(filename='computedStreamF_2.py', target='computedStreamF_2.py',
+                            database='/home/ac.scalandrini/repos/add_arctic_test/compass/ocean/tests/arctic_channel')
 
     # no setup() is needed
 
